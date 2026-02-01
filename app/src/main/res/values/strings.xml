@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SpidyEngine - Nostalgia Mode</string>
+    <string name="add_game_button">Add Game (APK + OBB)</string>
+    <string name="status_ready">Ready to Virtualize</string>
+    <string name="status_virtualizing">Virtualizing Android Environment...</string>
+    <string name="status_importing_obb">Importing OBB Data...</string>
+    <string name="status_launching">Launching Nostalgia Mode...</string>
+    <string name="error_apk_install">Failed to install APK inside Engine</string>
+    <string name="error_engine">Engine Error</string>
+    <string name="apk_selected">APK Selected. Now select OBB.</string>
+</resources>
