@@ -1,0 +1,26 @@
+// --- START OF FILE SpiderEngine-Upgraded-master/settings.gradle ---
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    // FIX: Changed from FAIL_ON_PROJECT_REPOS to PREFER_PROJECT to allow sub-modules to compile
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+    }
+}
+rootProject.name = "SpidyEngine"
+include ':app'
+include ':BCore'
+include ':BCore:black-fake'
+include ':BCore:black-hook'
+include ':BCore:pine-core'
+include ':BCore:pine-xposed'
+include ':BCore:pine-xposed-res'
+include ':android-mirror'
