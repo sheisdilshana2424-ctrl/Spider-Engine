@@ -1,0 +1,218 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Install Android SDK
+      uses: android-actions/setup-android@v3
+      
+    - name: Install Capacitor CLI
+      run: npm install -g @capacitor/cli
+      
+    - name: Create package.json
+      run: |
+        cat > package.json << 'EOF'
+        {
+          "name": "level-up-daily-growth",
+          "version": "1.0.0",
+          "description": "Level Up: Daily Growth - Personal productivity app",
+          "main": "index.html",
+          "scripts": {
+            "build": "echo 'Static app - no build needed'",
+            "sync": "cap sync",
+            "android": "cap open android"
+          },
+          "dependencies": {
+            "@capacitor/android": "^5.7.0",
+            "@capacitor/core": "^5.7.0",
+            "@capacitor/splash-screen": "^5.2.0",
+            "@capacitor/status-bar": "^5.0.7"
+          },
+          "devDependencies": {
+            "@capacitor/cli": "^5.7.0"
+          }
+        }
+        EOF
+        
+    - name: Create capacitor.config.json
+      run: |
+        cat > capacitor.config.json << 'EOF'
+        {
+          "appId": "com.shahil.levelup",
+          "appName": "Level Up",
+          "webDir": ".",
+          "bundledWebRuntime": false,
+          "plugins": {
+            "SplashScreen": {
+              "launchShowDuration": 3500,
+              "launchAutoHide": true,
+              "backgroundColor": "#1a1a2e",
+              "androidSplashResourceName": "splash",
+              "androidScaleType": "CENTER_CROP",
+              "showSpinner": false,
+              "splashFullScreen": true,
+              "splashImmersive": true
+            },
+            "StatusBar": {
+              "style": "DARK",
+              "backgroundColor": "#09090b",
+              "overlaysWebView": false
+            }
+          }
+        }
+        EOF
+        
+    - name: Install dependencies
+      run: npm install
+      
+    - name: Add Android platform
+      run: npx cap add android
+      
+    - name: Sync Capacitor
+      run: npx cap sync
+      
+    - name: Update AndroidManifest.xml
+      run: |
+        MANIFEST="android/app/src/main/AndroidManifest.xml"
+        # Add internet permission if not present
+        if ! grep -q "android.permission.INTERNET" "$MANIFEST"; then
+          sed -i 's/<manifest/<manifest xmlns:tools="http:\/\/schemas.android.com\/tools"/' "$MANIFEST"
+          sed -i 's/<\/manifest>/<uses-permission android:name="android.permission.INTERNET" \/>\n<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" \/>\n<\/manifest>/' "$MANIFEST"
+        fi
+        
+    - name: Update build.gradle for signing
+      run: |
+        APP_BUILD_GRADLE="android/app/build.gradle"
+        
+        # Create signing config
+        cat > /tmp/signing_config.txt << 'SIGNEOF'
+        android {
+            signingConfigs {
+                release {
+                    storeFile file("release.keystore")
+                    storePassword "shahil123"
+                    keyAlias "levelup"
+                    keyPassword "shahil123"
+                }
+            }
+        SIGNEOF
+        
+        # Replace the android block
+        sed -i 's/android {/android {\n    signingConfigs {\n        release {\n            storeFile file("release.keystore")\n            storePassword "shahil123"\n            keyAlias "levelup"\n            keyPassword "shahil123"\n        }\n    }/' "$APP_BUILD_GRADLE"
+        
+        # Update buildTypes to use signing
+        sed -i 's/buildTypes {/buildTypes {\n        release {\n            signingConfig signingConfigs.release\n            minifyEnabled false\n            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"\n        }/' "$APP_BUILD_GRADLE"
+        
+    - name: Generate keystore
+      run: |
+        cd android/app
+        keytool -genkey -v \
+          -keystore release.keystore \
+          -alias levelup \
+          -keyalg RSA \
+          -keysize 2048 \
+          -validity 10000 \
+          -storepass shahil123 \
+          -keypass shahil123 \
+          -dname "CN=Shahil, OU=Development, O=LevelUp, L=City, ST=State, C=IN"
+          
+    - name: Copy icons to Android resources
+      run: |
+        # Create mipmap directories
+        mkdir -p android/app/src/main/res/mipmap-ldpi
+        mkdir -p android/app/src/main/res/mipmap-mdpi
+        mkdir -p android/app/src/main/res/mipmap-hdpi
+        mkdir -p android/app/src/main/res/mipmap-xhdpi
+        mkdir -p android/app/src/main/res/mipmap-xxhdpi
+        mkdir -p android/app/src/main/res/mipmap-xxxhdpi
+        
+        # Copy icons to respective directories
+        cp assets/icons/icon-72x72.png android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+        cp assets/icons/icon-72x72.png android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png
+        cp assets/icons/icon-96x96.png android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+        cp assets/icons/icon-96x96.png android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png
+        cp assets/icons/icon-144x144.png android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+        cp assets/icons/icon-144x144.png android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png
+        cp assets/icons/icon-192x192.png android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+        cp assets/icons/icon-192x192.png android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png
+        cp assets/icons/icon-512x512.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+        cp assets/icons/icon-512x512.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
+        
+        # Create ic_launcher_background.xml
+        mkdir -p android/app/src/main/res/values
+        cat > android/app/src/main/res/values/ic_launcher_background.xml << 'EOF'
+        <?xml version="1.0" encoding="utf-8"?>
+        <resources>
+            <color name="ic_launcher_background">#8b5cf6</color>
+        </resources>
+        EOF
+        
+    - name: Build APK
+      run: |
+        cd android
+        chmod +x gradlew
+        ./gradlew assembleRelease --stacktrace
+        
+    - name: Rename APK with version
+      run: |
+        mkdir -p output
+        cp android/app/build/outputs/apk/release/app-release-unsigned.apk output/LevelUp-v1.0.0.apk 2>/dev/null || \
+        cp android/app/build/outputs/apk/release/app-release.apk output/LevelUp-v1.0.0.apk 2>/dev/null || \
+        cp android/app/build/outputs/apk/debug/app-debug.apk output/LevelUp-v1.0.0-debug.apk
+        
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: LevelUp-APK
+        path: output/*.apk
+        retention-days: 90
+        
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v1.0.0
+        name: Level Up v1.0.0
+        body: |
+          ## Level Up: Daily Growth - Android APK
+          
+          **Features:**
+          - 🚀 Daily task management with two modes (Focus & College)
+          - 🔥 Streak tracking
+          - 📊 Progress visualization
+          - 📝 Daily learning log
+          - 📅 History tracking
+          - 🎉 Confetti celebration on day completion
+          
+          **Developer:** Shahil
+          
+          ### Installation
+          1. Download the APK file
+          2. Enable "Install from Unknown Sources" in Settings
+          3. Install and enjoy!
+        files: output/*.apk
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
