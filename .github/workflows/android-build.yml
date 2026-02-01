@@ -1,0 +1,169 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      
+    - name: Accept Android SDK licenses
+      run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+    - name: Install NDK
+      run: |
+        echo "Installing NDK 25.1.8937393..."
+        echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.1.8937393"
+        echo "NDK installation complete"
+        echo "Verifying NDK installation..."
+        ls -la $ANDROID_HOME/ndk/ || echo "⚠️  NDK directory not found"
+        
+    - name: Install CMake
+      run: |
+        echo "Installing CMake 3.22.1..."
+        echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "cmake;3.22.1"
+        echo "CMake installation complete"
+        echo "Verifying CMake installation..."
+        ls -la $ANDROID_HOME/cmake/ || echo "⚠️  CMake directory not found"
+
+    - name: Set NDK environment variables
+      run: |
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.1.8937393" >> $GITHUB_ENV
+        echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/25.1.8937393" >> $GITHUB_ENV
+        echo "NDK_HOME=$ANDROID_HOME/ndk/25.1.8937393" >> $GITHUB_ENV
+        
+    - name: Verify build environment
+      run: |
+        echo "=== Build Environment ==="
+        echo "ANDROID_HOME: $ANDROID_HOME"
+        echo "ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
+        echo "Java Version:"
+        java -version
+        echo ""
+        echo "=== Verifying NDK Installation ==="
+        if [ -d "$ANDROID_HOME/ndk/25.1.8937393" ]; then
+          echo "✅ NDK found at: $ANDROID_HOME/ndk/25.1.8937393"
+          ls -la $ANDROID_HOME/ndk/25.1.8937393
+        else
+          echo "❌ NDK not found at expected location"
+          echo "Available NDK versions:"
+          ls -la $ANDROID_HOME/ndk/ || echo "No NDK directory found"
+        fi
+        echo ""
+        echo "=== Verifying CMake Installation ==="
+        if [ -d "$ANDROID_HOME/cmake" ]; then
+          echo "✅ CMake found"
+          ls -la $ANDROID_HOME/cmake/
+        else
+          echo "❌ CMake not found"
+        fi
+      
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Verify required files
+      run: |
+        echo "=== Verifying Project Files ==="
+        
+        # Check AndroidManifest.xml
+        if [ -f "app/src/main/AndroidManifest.xml" ]; then
+          echo "✅ AndroidManifest.xml exists"
+        else
+          echo "❌ AndroidManifest.xml missing!"
+          exit 1
+        fi
+        
+        # Check Application class
+        if [ -f "app/src/main/java/com/spidy/engine/SpidyEngineApplication.kt" ]; then
+          echo "✅ SpidyEngineApplication.kt exists"
+        else
+          echo "⚠️  SpidyEngineApplication.kt missing"
+        fi
+        
+        # Check MainActivity
+        if [ -f "app/src/main/java/com/spidy/engine/MainActivity.kt" ]; then
+          echo "✅ MainActivity.kt exists"
+        else
+          echo "⚠️  MainActivity.kt missing"
+        fi
+        
+        # Check strings.xml
+        if [ -f "app/src/main/res/values/strings.xml" ]; then
+          echo "✅ strings.xml exists"
+        else
+          echo "⚠️  strings.xml missing"
+        fi
+        
+        # Check CMakeLists.txt
+        if [ -f "BCore/src/main/cpp/CMakeLists.txt" ]; then
+          echo "✅ CMakeLists.txt exists"
+        else
+          echo "❌ CMakeLists.txt missing!"
+          exit 1
+        fi
+        
+        echo ""
+        echo "File verification complete!"
+
+    - name: Clean build
+      run: ./gradlew clean --no-daemon --stacktrace
+      
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug --no-daemon --stacktrace --info
+      
+    - name: Verify APK was built
+      run: |
+        echo "=== Checking for APK ==="
+        if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+          echo "✅ APK built successfully!"
+          echo ""
+          echo "APK Details:"
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+          echo ""
+          echo "APK Size:"
+          du -h app/build/outputs/apk/debug/app-debug.apk
+        else
+          echo "❌ APK not found!"
+          echo ""
+          echo "Checking build outputs directory:"
+          find app/build/outputs -type f 2>/dev/null || echo "No outputs found"
+          exit 1
+        fi
+
+    - name: Upload Debug APK
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: SpiderEngine-Debug-APK
+        path: app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 30
+        
+    - name: Upload build reports on failure
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: build-reports
+        path: |
+          app/build/reports/
+          BCore/build/reports/
+        retention-days: 7
